@@ -48,7 +48,7 @@ Thresholds can be adjusted from the command line. Green boxes indicate detection
 
 **Status: laptop validation pending.**
 
-The repository previously contained a 128-image exploratory benchmark collected in a 2-vCPU CPU environment. Those values are retained only as historical development data and are **not valid evidence for the laptop-only coursework evaluation**. They have not been presented here as laptop measurements.
+The committed `benchmark_results.csv` currently contains a 128-image exploratory benchmark collected in a 2-vCPU CPU environment. It is retained only as historical development data and is **not valid evidence for the laptop-only coursework evaluation**. The file is stale until you regenerate it on your own laptop; do not cite its values as your laptop results.
 
 Run the benchmark on the same Windows laptop used for the demonstration:
 
@@ -135,7 +135,7 @@ Do not overwrite or mix results from different machines without clearly separati
 | `green_detector.py` | Adaptive two-tier detector and live demo |
 | `benchmark.py` | Accuracy, speed and estimated-energy comparison |
 | `requirements.txt` | Python dependencies |
-| `benchmark_results.csv` | Benchmark output; regenerate on the laptop |
+| `benchmark_results.csv` | Currently contains historical 2-vCPU results; do not treat as laptop evidence. Regenerate locally before reporting |
 | `docs/EXPERIMENTAL_PROTOCOL.md` | Experimental design and reporting guidance |
 | `docs/LAPTOP_ONLY_EVALUATION.md` | Required laptop-only evidence and run procedure |
 | `docs/RESEARCH_GRADE_ROADMAP.md` | Clearly separated future work |
