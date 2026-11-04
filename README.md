@@ -4,6 +4,12 @@ An energy-aware, two-tier people detector for CO3091/7091. The research question
 
 ![System architecture](report/system_diagram.png)
 
+## Real-time dashboard sample
+
+![Green AI YOLO26 real-time people detection dashboard](docs/images/realtime_dashboard_sample.jpg)
+
+*Illustrative dashboard prototype. FPS, people count, energy and CO2 values shown in the screenshot are sample values, not verified measurements from a live benchmark.*
+
 ## How it works
 
 - **Tier 1: YOLO26n (nano, 2.4M params)** runs on every frame.
