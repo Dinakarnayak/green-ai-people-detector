@@ -10,7 +10,7 @@ The project explores a practical Green AI question:
 
 ## Demo preview
 
-![Green AI YOLO26 real-time people detection dashboard](docs/images/realtime_dashboard_sample.jpg)
+![Green AI YOLO26 real-time people detection dashboard](docs/images/realtime_sample_readme.jpg)
 
 *Illustrative dashboard prototype. The FPS, people count, energy and CO₂ values visible in this image are sample values, not measurements from a validated live run.*
 
