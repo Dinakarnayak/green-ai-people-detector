@@ -1,11 +1,12 @@
 """
-Benchmark YOLO26n, YOLO26s and the adaptive two-tier detector on the same
-images: person-class accuracy (AP50, AP50-95), speed and CodeCarbon energy.
+Compare YOLO26n, YOLO26s and adaptive routing on the same labelled images.
 
-    python benchmark.py                      # uses COCO128 (downloads ~7 MB)
-    python benchmark.py --data coco128.yaml --band 0.25 0.5
+Example:
+    python benchmark.py --data coco128.yaml --repeats 5
 
-Results are written to benchmark_results.csv.
+The person AP values are a lightweight 101-point approximation, not an
+official COCO evaluation. Use Ultralytics validation/pycocotools for formal
+benchmark reporting.
 """
 import argparse
 import csv
@@ -20,99 +21,179 @@ from ultralytics.data.utils import check_det_dataset
 from green_detector import GreenDetector, PERSON
 
 
-def load_gt(img_path):
-    """Read YOLO-format labels for one image -> person boxes in xyxy pixels."""
-    lbl = Path(str(img_path).replace("/images/", "/labels/")).with_suffix(".txt")
-    h, w = cv2.imread(str(img_path)).shape[:2]
-    if not lbl.exists():
-        return np.zeros((0, 4))
-    rows = np.loadtxt(lbl, ndmin=2)
+def load_ground_truth(image_path):
+    label_path = Path(str(image_path).replace("/images/", "/labels/")).with_suffix(".txt")
+    image = cv2.imread(str(image_path))
+    if image is None:
+        raise FileNotFoundError(f"Could not read image: {image_path}")
+    height, width = image.shape[:2]
+    if not label_path.exists():
+        return np.zeros((0, 4), dtype=float)
+
+    rows = np.loadtxt(label_path, ndmin=2)
     rows = rows[rows[:, 0] == PERSON]
-    cx, cy, bw, bh = rows[:, 1] * w, rows[:, 2] * h, rows[:, 3] * w, rows[:, 4] * h
-    return np.stack([cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2], 1)
+    if len(rows) == 0:
+        return np.zeros((0, 4), dtype=float)
+
+    cx, cy = rows[:, 1] * width, rows[:, 2] * height
+    bw, bh = rows[:, 3] * width, rows[:, 4] * height
+    return np.stack([cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2], axis=1)
 
 
-def iou(a, b):
-    x1 = np.maximum(a[:, None, 0], b[None, :, 0]); y1 = np.maximum(a[:, None, 1], b[None, :, 1])
-    x2 = np.minimum(a[:, None, 2], b[None, :, 2]); y2 = np.minimum(a[:, None, 3], b[None, :, 3])
-    inter = np.clip(x2 - x1, 0, None) * np.clip(y2 - y1, 0, None)
-    area = lambda r: (r[:, 2] - r[:, 0]) * (r[:, 3] - r[:, 1])
-    return inter / (area(a)[:, None] + area(b)[None, :] - inter + 1e-9)
+def calculate_iou(predicted, ground_truth):
+    if len(predicted) == 0 or len(ground_truth) == 0:
+        return np.zeros((len(predicted), len(ground_truth)), dtype=float)
+    x1 = np.maximum(predicted[:, None, 0], ground_truth[None, :, 0])
+    y1 = np.maximum(predicted[:, None, 1], ground_truth[None, :, 1])
+    x2 = np.minimum(predicted[:, None, 2], ground_truth[None, :, 2])
+    y2 = np.minimum(predicted[:, None, 3], ground_truth[None, :, 3])
+    intersection = np.clip(x2 - x1, 0, None) * np.clip(y2 - y1, 0, None)
+    pred_area = (predicted[:, 2] - predicted[:, 0]) * (predicted[:, 3] - predicted[:, 1])
+    gt_area = (ground_truth[:, 2] - ground_truth[:, 0]) * (ground_truth[:, 3] - ground_truth[:, 1])
+    union = pred_area[:, None] + gt_area[None, :] - intersection
+    return intersection / (union + 1e-9)
 
 
-def average_precision(preds, gts, thr):
-    """COCO-style 101-point AP for one class at one IoU threshold."""
-    n_gt = sum(len(g) for g in gts)
-    scores, tps = [], []
-    for (boxes, confs), gt in zip(preds, gts):
-        order = np.argsort(-confs)
-        boxes, confs = boxes[order], confs[order]
-        used = np.zeros(len(gt), bool)
-        ious = iou(boxes, gt) if len(gt) and len(boxes) else np.zeros((len(boxes), 0))
-        for i in range(len(boxes)):
-            j = int(np.argmax(ious[i])) if ious.shape[1] else -1
-            hit = j >= 0 and ious[i, j] >= thr and not used[j]
+def average_precision(predictions, ground_truths, iou_threshold):
+    total_gt = sum(len(boxes) for boxes in ground_truths)
+    if total_gt == 0:
+        return float("nan")
+
+    detections = []
+    for (boxes, scores), gt_boxes in zip(predictions, ground_truths):
+        order = np.argsort(-scores)
+        boxes, scores = boxes[order], scores[order]
+        overlaps = calculate_iou(boxes, gt_boxes)
+        matched = np.zeros(len(gt_boxes), dtype=bool)
+
+        for index, score in enumerate(scores):
+            best_gt = int(np.argmax(overlaps[index])) if len(gt_boxes) else -1
+            hit = (best_gt >= 0 and overlaps[index, best_gt] >= iou_threshold
+                   and not matched[best_gt])
             if hit:
-                used[j] = True
-            scores.append(confs[i]); tps.append(hit)
-    if not scores or n_gt == 0:
+                matched[best_gt] = True
+            detections.append((float(score), int(hit)))
+
+    if not detections:
         return 0.0
-    order = np.argsort(-np.array(scores))
-    tp = np.array(tps)[order].astype(float)
-    tp_c, fp_c = np.cumsum(tp), np.cumsum(1 - tp)
-    recall, precision = tp_c / n_gt, tp_c / (tp_c + fp_c)
-    precision = np.maximum.accumulate(precision[::-1])[::-1]
-    return float(np.mean([precision[recall >= r].max() if (recall >= r).any() else 0
-                          for r in np.linspace(0, 1, 101)]))
+
+    detections.sort(key=lambda item: item[0], reverse=True)
+    tp = np.cumsum([item[1] for item in detections])
+    fp = np.cumsum([1 - item[1] for item in detections])
+    recall = tp / total_gt
+    precision = tp / np.maximum(tp + fp, 1)
+    precision_envelope = np.maximum.accumulate(precision[::-1])[::-1]
+
+    samples = [
+        precision_envelope[recall >= level].max()
+        if np.any(recall >= level) else 0.0
+        for level in np.linspace(0, 1, 101)
+    ]
+    return float(np.mean(samples))
 
 
-def run(mode, images, gts, band, conf):
-    det = GreenDetector(mode, conf=conf, band=band)
-    det.detect(cv2.imread(str(images[0])))           # warm-up (not measured)
-    det.frames = det.escalations = 0
-    frames = [cv2.imread(str(p)) for p in images]
-    tracker = EmissionsTracker(project_name=f"bench-{mode}", measure_power_secs=1,
-                               log_level="error", save_to_file=False)
-    preds = []
-    tracker.start(); t0 = time.perf_counter()
-    for f in frames:
-        b, c, _ = det.detect(f)
-        preds.append((b, c))
-    secs = time.perf_counter() - t0; tracker.stop()
-    d = tracker.final_emissions_data
-    n = len(frames)
-    ap50 = average_precision(preds, gts, 0.5)
-    ap = np.mean([average_precision(preds, gts, t) for t in np.arange(0.5, 0.96, 0.05)])
+def run_benchmark(mode, image_paths, ground_truths, band, confidence):
+    detector = GreenDetector(
+        mode=mode, conf=confidence, band=band,
+        scene_aware=(mode == "adaptive"), audit_every=30,
+    )
+
+    # Warm up once, then reset counters before the measured run.
+    detector.detect(cv2.imread(str(image_paths[0])))
+    detector.frames = detector.escalations = 0
+    detector.tier_counts = {"nano": 0, "small": 0}
+
+    tracker = EmissionsTracker(
+        project_name=f"green-ai-benchmark-{mode}",
+        measure_power_secs=1, log_level="error", save_to_file=False,
+    )
+    predictions = []
+    total_latency = 0.0
+    tracker.start()
+    start = time.perf_counter()
+    try:
+        for image_path in image_paths:
+            image = cv2.imread(str(image_path))
+            if image is None:
+                raise FileNotFoundError(f"Could not read image: {image_path}")
+            inference_start = time.perf_counter()
+            boxes, scores, _ = detector.detect(image)
+            total_latency += time.perf_counter() - inference_start
+            predictions.append((boxes, scores))
+    finally:
+        tracker.stop()
+
+    elapsed = time.perf_counter() - start
+    emissions = tracker.final_emissions_data
+    count = max(len(image_paths), 1)
+    ap50 = average_precision(predictions, ground_truths, 0.50)
+    ap_values = [
+        average_precision(predictions, ground_truths, threshold)
+        for threshold in np.arange(0.50, 0.96, 0.05)
+    ]
+    ap5095 = float(np.nanmean(ap_values))
+
+    energy_kwh = float(emissions.energy_consumed)
+    co2_kg = float(emissions.emissions)
     return {
-        "mode": mode, "images": n,
-        "AP50_person": round(ap50, 3), "AP50-95_person": round(float(ap), 3),
-        "ms_per_image": round(1000 * secs / n, 1),
-        "energy_per_image_J": round(d.energy_consumed * 3.6e6 / n, 3),
-        "co2_per_1000_images_g": round(d.emissions * 1e6 / n, 4),
-        "escalation_rate_%": round(100 * det.escalations / n, 1),
+        "mode": mode,
+        "images": len(image_paths),
+        "person_AP50_approx": round(ap50, 4),
+        "person_AP50_95_approx": round(ap5095, 4),
+        "mean_latency_ms": round(1000 * total_latency / count, 2),
+        "wall_clock_fps": round(count / elapsed, 2) if elapsed else 0,
+        "energy_kwh": round(energy_kwh, 9),
+        "energy_per_image_j": round(energy_kwh * 3_600_000 / count, 6),
+        "co2_kg": round(co2_kg, 9),
+        "co2_g_per_1000_images": round(co2_kg * 1_000_000 / count, 6),
+        "escalation_rate_pct": round(100 * detector.escalations / count, 2),
     }
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--data", default="coco128.yaml")
-    ap.add_argument("--band", type=float, nargs=2, default=(0.25, 0.50))
-    ap.add_argument("--conf", type=float, default=0.001, help="low conf for fair AP")
-    ap.add_argument("--repeats", type=int, default=1, help="repeat image set for steadier energy")
-    args = ap.parse_args()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--data", default="coco128.yaml")
+    parser.add_argument("--band", type=float, nargs=2, default=(0.25, 0.50))
+    parser.add_argument("--conf", type=float, default=0.001)
+    parser.add_argument("--repeats", type=int, default=5)
+    parser.add_argument("--output", default="benchmark_results.csv")
+    args = parser.parse_args()
 
-    info = check_det_dataset(args.data)
-    img_dir = Path(info["val"]) if Path(info["val"]).is_dir() else Path(info["path"]) / info["val"]
-    images = sorted(p for p in img_dir.iterdir() if p.suffix.lower() in (".jpg", ".png"))
-    gts = [load_gt(p) for p in images]
-    images, gts = images * args.repeats, gts * args.repeats
-    print(f"{len(images)} images, {sum(len(g) for g in gts)} person boxes")
+    if args.repeats < 1:
+        parser.error("--repeats must be at least 1")
+    if not 0 <= args.band[0] < args.band[1] <= 1:
+        parser.error("--band must satisfy 0 <= LOW < HIGH <= 1")
 
-    rows = [run(m, images, gts, tuple(args.band), args.conf) for m in ("small", "nano", "adaptive")]
-    with open("benchmark_results.csv", "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=rows[0].keys()); w.writeheader(); w.writerows(rows)
-    for r in rows:
-        print(r)
+    dataset = check_det_dataset(args.data)
+    image_dir = Path(dataset["val"])
+    if not image_dir.is_dir():
+        image_dir = Path(dataset["path"]) / dataset["val"]
+    image_paths = sorted(
+        p for p in image_dir.iterdir()
+        if p.suffix.lower() in (".jpg", ".jpeg", ".png")
+    )
+    if not image_paths:
+        raise SystemExit(f"No validation images found in {image_dir}")
+
+    ground_truths = [load_ground_truth(path) for path in image_paths]
+    image_paths *= args.repeats
+    ground_truths *= args.repeats
+    print(f"{len(image_paths)} image passes; {sum(map(len, ground_truths))} person annotations.")
+
+    rows = [
+        run_benchmark(mode, image_paths, ground_truths, tuple(args.band), args.conf)
+        for mode in ("small", "nano", "adaptive")
+    ]
+    output = Path(args.output)
+    with output.open("w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=list(rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(rows)
+
+    print("\nBenchmark results (AP values are approximations):")
+    for row in rows:
+        print(row)
+    print(f"Saved results to {output}")
 
 
 if __name__ == "__main__":
