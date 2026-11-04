@@ -16,12 +16,19 @@ Can adaptive inference reduce energy use while retaining useful person-detection
 
 Scene-aware routing uses simple image statistics (brightness, contrast and Laplacian variance). These are heuristics, not a learned scene classifier. Periodic audits are included because confidence-only routing cannot escalate when the nano model returns no detection.
 
+## Sample image
+
+The diagram below illustrates the two-stage adaptive detection pipeline and the energy-monitoring workflow.
+
+![Green AI People Detector system architecture](report/system_diagram.png)
+
 ## Files
 
 - green_detector.py — webcam, image, video and folder inference
 - benchmark.py — comparison of nano, small and adaptive modes
 - requirements.txt — Python dependencies
 - benchmark_results.csv — existing repository benchmark record; verify its provenance before citing it
+- report/system_diagram.png — system architecture image displayed above
 - run_log.csv — generated locally after running the detector
 
 ## Setup (Windows PowerShell)
