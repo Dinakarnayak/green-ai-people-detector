@@ -60,8 +60,15 @@ def match(preds, gts, thr, min_conf=0.0):
         used = np.zeros(len(gt), bool)
         ious = iou(boxes, gt) if len(gt) and len(boxes) else np.zeros((len(boxes), 0))
         for i in range(len(boxes)):
-            j = int(np.argmax(ious[i])) if ious.shape[1] else -1
-            hit = j >= 0 and ious[i, j] >= thr and not used[j]
+            # Match each prediction to the best still-unmatched ground-truth box.
+            # Choosing the global best first can incorrectly reject a valid
+            # second-best match when the best box has already been claimed.
+            available = np.flatnonzero(~used)
+            if len(available):
+                j = int(available[np.argmax(ious[i, available])])
+                hit = ious[i, j] >= thr
+            else:
+                j, hit = -1, False
             if hit:
                 used[j] = True
             scores.append(confs[i]); tps.append(hit)
