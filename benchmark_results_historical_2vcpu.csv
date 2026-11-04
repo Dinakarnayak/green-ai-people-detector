@@ -1,0 +1,6 @@
+configuration,images,AP50,AP50-95,precision@0.25,recall@0.25,inference_ms,end_to_end_ms,energy_per_image_J,total_energy_J,run_seconds,escalation_%,reasons,model_load_s,model_load_energy_J
+YOLO26s only,128,0.826,0.615,0.825,0.74,210.5,210.5,2.558,327.4,26.9,0.0,-,0.08,0.9
+YOLO26n only,128,0.776,0.539,0.866,0.661,82.7,82.9,0.972,124.4,10.6,0.0,-,0.07,0.86
+Two-tier: band,128,0.824,0.601,0.83,0.728,124.9,125.1,1.466,187.7,16.0,20.3,uncertain=26,0.11,1.31
+Two-tier: band + candidates,128,0.822,0.601,0.821,0.74,133.4,133.6,1.566,200.5,17.1,25.0,uncertain=26;candidate=6,0.13,1.51
+Two-tier: band + candidates + scene,128,0.822,0.602,0.821,0.74,147.0,147.9,1.735,222.1,18.9,27.3,uncertain=26;candidate=6;scene=3,0.14,1.68
