@@ -1,0 +1,6 @@
+*.pt
+__pycache__/
+run_log.csv
+out*/
+datasets/
+venv/

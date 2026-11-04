@@ -1,0 +1,4 @@
+mode,images,AP50_person,AP50-95_person,ms_per_image,energy_per_image_J,co2_per_1000_images_g,escalation_rate_%
+small,128,0.826,0.615,229.3,2.697,0.0029,0.0
+nano,128,0.776,0.539,83.4,0.983,0.0011,0.0
+adaptive,128,0.824,0.601,131.8,1.554,0.0017,20.3
