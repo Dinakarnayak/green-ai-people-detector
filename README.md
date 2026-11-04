@@ -46,7 +46,7 @@ Thresholds can be adjusted from the command line. Green boxes indicate detection
 
 ## Experimental results status
 
-<badge color="warning">Laptop validation pending</badge>
+**Status: laptop validation pending.**
 
 The repository previously contained a 128-image exploratory benchmark collected in a 2-vCPU CPU environment. Those values are retained only as historical development data and are **not valid evidence for the laptop-only coursework evaluation**. They have not been presented here as laptop measurements.
 
