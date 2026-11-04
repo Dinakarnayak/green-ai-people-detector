@@ -1,114 +1,70 @@
-# Experimental Protocol — Green AI People Detector
+# Experimental Protocol — Laptop-only Green AI People Detector
 
-## 1. Study objective
+## 1. Scope
+Compare YOLO26n-only, YOLO26s-only and adaptive inference on the student's own Windows laptop. All assessed demonstrations, benchmarks, screenshots and measurements must come from that laptop. Do not use another computer, cloud VM, remote GPU or external edge device as coursework evidence.
 
-Compare YOLO26n-only, YOLO26s-only and adaptive YOLO26n-to-YOLO26s inference for person detection. Evaluate detection quality, computational performance and estimated environmental impact jointly.
+## 2. Objective and hypotheses
+Evaluate detection quality, runtime and CodeCarbon-estimated environmental impact together.
+- H1: Adaptive inference may use less estimated energy per frame than YOLO26s-only while retaining useful person recall.
+- H2: Adaptive inference may use more energy than YOLO26n-only but improve detection quality on difficult frames.
+- H3: Scene checks and periodic audits may identify difficult frames missed by confidence-only routing.
+- H4: Routing thresholds change the quality-energy-latency trade-off.
 
-## 2. Experimental hypotheses
+These are hypotheses, not guaranteed findings.
 
-- H1: Adaptive inference uses less energy per processed frame than YOLO26s-only under a pre-defined non-inferiority margin for person recall/AP.
-- H2: Adaptive inference has higher energy use than YOLO26n-only but may improve detection quality on difficult frames.
-- H3: Periodic audits and scene-aware signals recover some difficult cases that confidence-only routing cannot identify.
-- H4: Routing thresholds change the quality-energy-latency trade-off and produce a Pareto frontier rather than a single universally optimal setting.
+## 3. Laptop and software record
+Record actual values before testing; do not guess or copy another machine's specifications:
+- Laptop make/model, CPU, GPU (if used), RAM and Windows version.
+- Power mode and whether plugged in or on battery.
+- Python, PyTorch, CUDA (if applicable), Ultralytics, OpenCV and CodeCarbon versions.
+- Model weight filenames, input size, confidence threshold and dataset version.
+- Code commit and whether inference uses CPU or GPU.
 
-These are hypotheses to test, not expected or guaranteed findings.
+Use the same laptop, dataset, software environment and settings for comparable runs.
 
-## 3. Dataset and leakage control
-
-- Identify dataset source, licence, version, annotation format and person class mapping.
-- Split by source video, camera, site or recording session where possible. Avoid random frame-level splits when adjacent frames are near duplicates.
-- Keep a held-out test set untouched until policy and threshold selection are complete.
-- Report image/sequence counts, person-instance counts, object-size distribution and scene-condition distribution.
-- Preserve annotation provenance and any excluded or corrupted samples.
-
-## 4. Systems controls
-
-Record:
-- CPU, GPU, RAM, storage, operating system and power mode.
-- Python, PyTorch, CUDA, Ultralytics, OpenCV and CodeCarbon versions.
-- Model weight filenames and hashes.
-- Input resolution, frame rate, image size, confidence threshold and source resolution.
-- Thermal state, warm-up procedure, background load and whether the device is plugged in.
-
-Use the same hardware, data, image size, model versions and software environment across comparable runs.
-
-## 5. Baselines and policies
-
-At minimum:
-1. YOLO26n on every frame.
-2. YOLO26s on every frame.
+## 4. Baselines
+1. YOLO26n on every image.
+2. YOLO26s on every image.
 3. Current adaptive policy.
-4. Fixed periodic escalation with a matched escalation budget.
-5. Random escalation with a matched escalation budget.
+4. Confidence-band-only ablation.
+5. Candidate-trigger ablation.
+6. Scene-trigger ablation when relevant test images are available.
 
-For a fair comparison, match escalation budgets where possible and report the actual escalation rate. The current implementation's adaptive policy uses confidence-band, crowd, scene-statistic and periodic-audit triggers.
+Record actual escalation rates and use identical inputs.
 
-## 6. Ablation and sensitivity experiments
+## 5. Run procedure
+1. Close unnecessary applications and keep power state consistent.
+2. Download model weights and data before timed runs.
+3. Warm up each model before measured runs.
+4. Run all configurations on the same image set.
+5. Perform at least five independent runs where practical.
+6. Alternate run order where practical to reduce thermal/order effects.
+7. Preserve all raw outputs; do not select only the best run.
+8. Do not mix results from other machines with laptop results.
 
-Run the full adaptive policy, then remove one component at a time:
-- No confidence-band trigger.
-- No crowd trigger.
-- No scene-quality trigger.
-- No periodic audit.
-- Confidence-only policy.
+Suggested command: `python benchmark.py --repeats 5`.
 
-Sweep:
-- Confidence threshold and uncertainty-band boundaries.
-- Audit interval.
-- Crowd threshold.
-- Image size.
-- Scene brightness, contrast and blur thresholds.
-
-Choose settings using validation data only. Freeze settings before test evaluation.
-
-## 7. Metrics
-
+## 6. Metrics
 ### Detection quality
-Use a standard evaluator to report person-class AP50 and AP50:95, precision, recall, F1, false-positive count and false-negative count. Describe matching rules and confidence thresholds.
+The current benchmark reports exploratory person-class AP50 and AP50:95 approximations, plus precision and recall. These are not official COCO metrics. State this limitation. Use a trusted evaluator for formal AP claims.
 
 ### Runtime
-Report mean, median, p95 and p99 inference latency; end-to-end latency; sustained throughput; warm-up time; and dropped/late frames if measured. Clearly define each timing boundary.
+Report inference time per image and end-to-end time separately. Define FPS precisely. Do not describe inference-only timing as end-to-end latency.
 
 ### Energy and emissions
-Report total energy, energy per frame, estimated CO2 and CO2 per 1,000 frames. State telemetry availability, emissions factor/region, measurement interval and included hardware components. Treat energy per frame as run-level energy divided by frame count, not a direct marginal measurement.
+Report CodeCarbon energy and CO2e as estimates. State telemetry availability and whether power was measured or estimated. Energy per frame is run-level estimated energy divided by processed frames, not a direct marginal measurement. Do not claim physical wall-power measurement without a power meter.
 
 ### Routing
-Report escalation rate, escalation reasons and quality metrics stratified by escalated/non-escalated frames. Do not infer that an escalation trigger is a correct uncertainty estimate without validation.
+Report escalation percentage and counts by reason. Do not describe confidence thresholds as calibrated probabilities unless calibration has been tested.
 
-## 8. Repeats and statistical analysis
+## 7. Evidence
+- Actual laptop hardware/software metadata.
+- YOLO26n-only, YOLO26s-only and adaptive runs.
+- Repeated benchmark outputs and raw CSV/logs.
+- Genuine screenshots or recording from the laptop.
+- Chart generated from the laptop's own results.
+- Limitations and energy-estimation method documented.
+- No other-machine results presented as laptop evidence.
 
-- Warm up models before measured runs.
-- Perform at least five independent runs for initial comparisons; more may be needed for stable estimates.
-- Alternate or randomise baseline order to reduce thermal/order effects.
-- Report mean, standard deviation and confidence intervals.
-- Use paired comparisons on the same sequences.
-- Bootstrap at the sequence/video level where possible; adjacent frames are correlated and should not be treated as independent samples.
-- Report effect sizes and predefine practical significance/non-inferiority margins.
-
-## 9. Robustness and subgroup analysis
-
-Stratify results by:
-- Low light and overexposure.
-- Blur and camera motion.
-- Occlusion and crowd density.
-- Small/distant people.
-- Indoor/outdoor scenes and camera viewpoints.
-- Dataset/site/camera domain.
-
-Inspect representative false positives and false negatives. Evaluate whether error rates differ across relevant environments and groups where lawful, appropriate and supported by reliable annotations.
-
-## 10. Reproducibility package
-
-Archive:
-- Exact code commit and environment lock/export.
-- Dataset version and split manifest.
-- Model weights or their identifiers and hashes.
-- Command lines and configuration.
-- Raw per-run CSV/log files.
-- Evaluation outputs and analysis scripts.
-- Hardware/software metadata.
-- Failure-case examples and limitations.
-
-## 11. Interpretation
-
-Do not claim energy savings without repeated measurements and uncertainty estimates. Do not claim preserved quality without a pre-specified margin and held-out evaluation. Distinguish implemented code from proposed work. The repository's lightweight AP approximation is exploratory only; use official Ultralytics validation and/or pycocotools for formal reporting.
+## 8. Interpretation
+Do not claim energy savings or preserved detection quality until the laptop experiment supports those claims. Separate implemented code, laptop measurements, CodeCarbon estimates, illustrative images and future work.
