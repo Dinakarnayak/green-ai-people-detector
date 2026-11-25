@@ -1,73 +1,57 @@
 # Green AI People Detector
 
-An energy-aware people-detection system built with **YOLO26** and **CodeCarbon**. The system uses a lightweight-first, two-tier pipeline: YOLO26n processes every frame and YOLO26s is invoked only when configured escalation rules indicate that a frame may need a closer look.
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)
 
-**Evaluation scope: one Windows laptop only.** All demonstrations, benchmarks, screenshots and performance measurements submitted for this project must be generated on the student's own laptop. No Raspberry Pi, cloud VM, remote GPU, second computer or external edge device is part of the evaluated implementation.
+An energy-aware people-detection pipeline built with **YOLO26** and **CodeCarbon**.
 
-The project investigates:
+Most detection systems run one large model on every frame. This project runs a small model first and only calls a larger one when a frame actually needs it. YOLO26n processes every frame, and YOLO26s is invoked only when escalation rules (low confidence, weak candidates, dark or blurred scenes, or a periodic safety check) say a closer look is worthwhile. CodeCarbon tracks the estimated energy and CO₂e of each run, so you can see what accuracy you gain for the energy you spend.
 
-> Can adaptive model selection reduce estimated inference energy while retaining useful person-detection performance on a single laptop?
+The question the project explores:
+
+> Can adaptive model selection reduce inference energy while keeping person detection useful on ordinary hardware?
 
 ![System architecture](report/system_diagram.png)
 
 ## Demo preview
 
-![Green AI YOLO26 real-time people detection dashboard](docs/images/realtime_sample_readme.jpg)
+![Real-time people detection dashboard](docs/images/realtime_sample_readme.jpg)
 
-*Illustrative dashboard prototype only. FPS, people count, energy and CO₂ values shown are sample values, not measurements from a validated live run. Do not submit this image as experimental evidence.*
+*Illustrative dashboard prototype. The FPS, people count, energy and CO₂ values shown are sample values, not measured results.*
 
-## Key features
+## Features
 
-- **Adaptive two-tier inference:** YOLO26n is the default model; YOLO26s handles selected escalated frames.
-- **Confidence-based escalation:** uncertain detections and weak person candidates can trigger the larger model.
+- **Adaptive two-tier inference:** YOLO26n by default, with YOLO26s for escalated frames.
+- **Confidence-based escalation:** uncertain detections and weak person candidates trigger the larger model.
 - **Optional scene checks:** dark or blurred frames can be escalated with `--scene`.
-- **Periodic safety check:** video frames can be escalated at a configurable interval.
+- **Periodic safety check:** every Nth video frame can be re-checked by the larger model.
 - **Energy tracking:** CodeCarbon records run-level energy and estimated emissions.
-- **Run logging:** summaries are printed and appended to `run_log.csv`.
-- **Benchmarking:** compare model configurations on the same labelled image set on the same laptop.
+- **Run logging:** each run's summary is printed and appended to `run_log.csv`.
+- **Benchmarking:** compare nano-only, small-only and adaptive configurations on the same labelled image set.
 
 ## How it works
 
 1. A frame enters Tier 1, where YOLO26n performs person detection.
-2. The detector checks confidence values and configured escalation conditions.
+2. The detector checks confidence values and the configured escalation conditions.
 3. If a trigger fires, Tier 2 (YOLO26s) re-processes that frame.
-4. The system draws detections and records timing, escalation and energy information.
+4. Detections are drawn and timing, escalation and energy information is recorded.
 
 ### Escalation rules
 
 | Trigger | Condition | Default |
 |---|---|---|
-| `uncertain` | Person confidence is between 0.25 and 0.50 | Enabled |
-| `candidate` | Weak person candidate is between 0.10 and 0.25 | Enabled |
-| `scene` | Frame is very dark (mean brightness below 40) or blurred (Laplacian variance below 30) | Disabled; enable with `--scene` |
+| `uncertain` | Person confidence between 0.25 and 0.50 | Enabled |
+| `candidate` | Weak person candidate between 0.10 and 0.25 | Enabled |
+| `scene` | Frame is very dark (mean brightness < 40) or blurred (Laplacian variance < 30) | Disabled; enable with `--scene` |
 | `periodic` | Every Nth frame is sent to the larger model as a safety check | Every 30 frames; disable with `--every 0` |
 
-Thresholds can be adjusted from the command line. Green boxes indicate detections handled by YOLO26n; orange boxes indicate an escalated frame, with the trigger reason shown on screen.
+All thresholds can be adjusted from the command line. Green boxes are detections from YOLO26n; orange boxes mark an escalated frame, with the trigger reason shown on screen.
 
-## Experimental results status
+## Installation
 
-**Status: laptop validation pending.**
+Requires Python 3.9 or later, plus a webcam, video file or image folder. Internet access is needed on first run to download model weights and the default COCO128 dataset.
 
-The committed `benchmark_results.csv` currently contains a 128-image exploratory benchmark collected in a 2-vCPU CPU environment. It is retained only as historical development data and is **not valid evidence for the laptop-only coursework evaluation**. The file is stale until you regenerate it on your own laptop; do not cite its values as your laptop results.
-
-Run the benchmark on the same Windows laptop used for the demonstration:
-
-```powershell
-python benchmark.py --repeats 5
-```
-
-Until that run is completed, this README makes no claim about the laptop's measured accuracy, FPS, latency, energy use or CO₂e. Use the generated laptop results and raw logs when completing the report. The benchmark's AP calculation is a lightweight approximation, not official Ultralytics or pycocotools COCO evaluation; label it accordingly.
-
-CodeCarbon provides estimated energy and emissions. Unless a physical power meter is used, do not describe these estimates as direct wall-power measurements. State the laptop hardware, software versions, power mode, measurement method and run conditions.
-
-## Requirements
-
-- Python 3.9 or later recommended
-- Windows laptop for the assessed demonstration (the code may also run on other operating systems, but those are outside the assessed setup)
-- Webcam, video file or image folder
-- Internet access on first run to download model weights and the default COCO128 dataset
-
-### Windows (PowerShell)
+**Windows (PowerShell)**
 
 ```powershell
 python -m venv venv
@@ -76,11 +60,20 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-YOLO26 weights (`yolo26n.pt` and `yolo26s.pt`) are downloaded automatically by Ultralytics when first required.
+**macOS / Linux**
 
-## Run the detector
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+```
 
-```powershell
+YOLO26 weights (`yolo26n.pt` and `yolo26s.pt`) are downloaded automatically by Ultralytics when first needed. The project has been developed and tested mainly on Windows; reports from other platforms are welcome.
+
+## Usage
+
+```bash
 # Adaptive mode with the default webcam
 python green_detector.py
 
@@ -93,40 +86,38 @@ python green_detector.py --mode small
 # Enable dark/blurred-scene escalation
 python green_detector.py --scene
 
-# Process a local video and escalate every 15 frames
+# Process a video and escalate every 15 frames
 python green_detector.py --source video.mp4 --every 15
 
-# Process an image folder without opening a display window
+# Process an image folder without a display window
 python green_detector.py --source images/ --no-show --save outputs/demo
 
-# Run a bounded local webcam demo
-python green_detector.py --max-frames 300 --save outputs/laptop-demo
+# Bounded webcam run
+python green_detector.py --max-frames 300 --save outputs/webcam-run
 ```
 
 Press **Q** to close a live display. Each run prints a summary and appends it to `run_log.csv`.
 
-## Reproduce the laptop benchmark
+## Benchmarking
 
-```powershell
+```bash
 python benchmark.py --repeats 5
 ```
 
-Use the same laptop, dataset, image size, model weights and software environment for all configurations. Warm up models, keep background load and power mode consistent, and report all independent runs rather than selecting the best one. See [Laptop-only evaluation protocol](docs/LAPTOP_ONLY_EVALUATION.md).
-
 The benchmark writes:
-- `benchmark_results.csv` — configuration-level results from the machine on which it was run.
-- `accuracy_vs_energy.png` — accuracy-versus-estimated-energy chart.
+- `benchmark_results.csv`: configuration-level results for the machine it ran on.
+- `accuracy_vs_energy.png`: accuracy versus estimated energy chart.
 
-Do not overwrite or mix results from different machines without clearly separating them.
+For fair comparisons, use the same machine, dataset, image size, model weights and software environment for every configuration. Warm up the models, keep background load and power mode consistent, and report all runs rather than the best one. Don't mix results from different machines without labelling them. See [docs/EXPERIMENTAL_PROTOCOL.md](docs/EXPERIMENTAL_PROTOCOL.md) and [docs/LAPTOP_ONLY_EVALUATION.md](docs/LAPTOP_ONLY_EVALUATION.md) for the full protocol.
 
-## Suggested demonstration
+### Results status
 
-1. Run YOLO26s-only and show the baseline detections.
-2. Run YOLO26n-only and compare detection quality and speed.
-3. Run adaptive mode and show when escalation occurs.
-4. Use a local dark or blurred video/image only if demonstrating the optional scene trigger.
-5. Show the actual laptop-generated `run_log.csv`, benchmark CSV and terminal output.
-6. Explain the difference between inference latency, end-to-end FPS and CodeCarbon energy estimates.
+The committed `benchmark_results.csv` holds an early 128-image exploratory run from a 2-vCPU CPU environment. Treat it as development data only. Validated results on laptop hardware are pending, so this README makes no claims yet about measured accuracy, FPS, latency, energy or CO₂e.
+
+### About the measurements
+
+- **Energy:** CodeCarbon gives estimates based on available hardware telemetry, not direct wall-power readings. When reporting, state the hardware, software versions, power mode and run conditions.
+- **Accuracy:** the built-in AP calculation is a lightweight approximation. For formal results, use Ultralytics validation or pycocotools.
 
 ## Repository structure
 
@@ -135,22 +126,41 @@ Do not overwrite or mix results from different machines without clearly separati
 | `green_detector.py` | Adaptive two-tier detector and live demo |
 | `benchmark.py` | Accuracy, speed and estimated-energy comparison |
 | `requirements.txt` | Python dependencies |
-| `benchmark_results.csv` | Currently contains historical 2-vCPU results; do not treat as laptop evidence. Regenerate locally before reporting |
+| `benchmark_results.csv` | Exploratory 2-vCPU results (development data only) |
 | `docs/EXPERIMENTAL_PROTOCOL.md` | Experimental design and reporting guidance |
-| `docs/LAPTOP_ONLY_EVALUATION.md` | Required laptop-only evidence and run procedure |
-| `docs/RESEARCH_GRADE_ROADMAP.md` | Clearly separated future work |
-| `docs/images/realtime_sample_readme.jpg` | Illustrative dashboard only |
-| `report/system_diagram.png` | System architecture diagram |
-| `report/` | Coursework report materials |
+| `docs/LAPTOP_ONLY_EVALUATION.md` | Single-machine evaluation procedure |
+| `docs/RESEARCH_GRADE_ROADMAP.md` | Planned future work |
+| `docs/images/` | Illustrative images |
+| `report/` | Project report and system diagram |
 
 ## Limitations
 
-- COCO128 is a small evaluation set and does not represent all real-world people-detection conditions.
-- The repository's AP implementation is an exploratory approximation; formal reporting requires a validated evaluator such as Ultralytics validation and/or pycocotools.
-- CodeCarbon energy and CO₂e are estimates and depend on the hardware telemetry and estimation method available.
-- Further evaluation should include crowded scenes, occlusion, low light, motion blur and small/distant people, using local data on the same laptop.
-- External edge-device deployment is outside this coursework's demonstration scope and must not be described as completed.
+- COCO128 is a small evaluation set and doesn't cover all real-world conditions.
+- Energy and CO₂e figures are estimates.
+- Crowded scenes, occlusion, low light, motion blur and small or distant people need further evaluation.
+- Edge-device deployment (e.g. Raspberry Pi, Jetson) is not yet implemented.
+
+## Roadmap
+
+- Package the detector as an installable Python library with a clean API
+- Add tests and continuous integration
+- Validate benchmarks across more hardware
+- Add new escalation strategies and support for more model families
+
+See [docs/RESEARCH_GRADE_ROADMAP.md](docs/RESEARCH_GRADE_ROADMAP.md) for details.
+
+## Contributing
+
+Contributions are welcome: bug reports, benchmark results from your own hardware, new escalation rules or documentation fixes. Please open an issue to discuss larger changes before sending a pull request. When sharing results, include your hardware, software versions and the exact command you ran.
 
 ## Research integrity
 
-Separate implemented features, measured laptop results, estimated values, illustrative material and proposed future work. Do not describe a prototype image as a live screenshot. Record the code commit, model weights, dataset version, laptop specifications, software environment and command used for every experiment.
+Keep implemented features, measured results, estimated values, illustrative material and future work clearly separate. Don't present a prototype image as a live screenshot. For every experiment, record the code commit, model weights, dataset version, hardware, software environment and command used.
+
+## Origin
+
+This project began as part of an MSc Artificial Intelligence module at the University of Leicester and is now maintained as an open-source project.
+
+## License
+
+Released under the [MIT License](LICENSE).
